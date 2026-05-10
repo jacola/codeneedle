@@ -198,7 +198,7 @@ def cmd_rescore(args: argparse.Namespace) -> int:
             )
 
     # Honor original dump's relax_indent unless overridden on the CLI.
-    relax_indent = bool(dump.get("relax_indent", False))
+    relax_indent = bool(dump.get("relax_indent", True))
     if args.relax_indent:
         relax_indent = True
     if args.strict_indent:
@@ -279,11 +279,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.add_argument(
         "--relax-indent", action="store_true",
-        help="ignore leading whitespace when matching (overrides model config to true)",
+        help="ignore leading whitespace when matching (default; overrides model config to true)",
     )
     p_run.add_argument(
         "--strict-indent", action="store_true",
-        help="enforce verbatim indentation (overrides model config to false)",
+        help="enforce verbatim indentation (overrides default relaxed matching)",
     )
     p_run.set_defaults(func=cmd_run)
 
@@ -295,11 +295,11 @@ def build_parser() -> argparse.ArgumentParser:
     src_grp.add_argument("--file", help="re-locate corpus from a single file")
     p_rs.add_argument(
         "--relax-indent", action="store_true",
-        help="ignore leading whitespace when matching (overrides dump's setting)",
+        help="ignore leading whitespace when matching (default; overrides dump's setting)",
     )
     p_rs.add_argument(
         "--strict-indent", action="store_true",
-        help="enforce verbatim indentation (overrides dump's setting)",
+        help="enforce verbatim indentation (overrides default relaxed matching)",
     )
     p_rs.set_defaults(func=cmd_rescore)
 

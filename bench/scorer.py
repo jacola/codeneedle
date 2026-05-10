@@ -40,15 +40,15 @@ def score(
     primary: list[str],
     bonus: list[str],
     predicted_text: str,
-    relax_indent: bool = False,
+    relax_indent: bool = True,
 ) -> FunctionScore:
     """Score a single function's predicted output against expected lines.
 
-    `relax_indent=True` normalizes both sides with `.strip()` instead of
-    `.rstrip()` only — i.e. leading whitespace is ignored when matching. Use
-    this for models like Gemma that emit semantically-correct code but
-    normalize indentation, where strict verbatim matching would unfairly
-    penalize content the model actually got right. Default is strict.
+    `relax_indent=True` (default) normalizes both sides with `.strip()`
+    instead of `.rstrip()` only — i.e. leading whitespace is ignored when
+    matching.  This avoids penalizing correct answers that differ only in
+    absolute indentation.  Pass `relax_indent=False` for strict verbatim
+    matching.
     """
     predicted = _clean_output(predicted_text)
     norm = _norm_relaxed if relax_indent else _norm
@@ -82,6 +82,16 @@ def score(
         1 for i in range(len(exp_primary), len(exp_full)) if matched_exp[i]
     )
     hallucinated = sum(1 for k in pred_kind if k == -1)
+
+    # Auto-credit blank expected lines: models often omit trailing or
+    # interior blanks even when reproducing the rest verbatim, and we
+    # don't want to penalize that. We add the credit AFTER counting real
+    # matches so we don't accidentally double-count blanks the model did
+    # produce. Display still tags them MATCHED so the diff view is honest.
+    for i, line in enumerate(exp_primary):
+        if line == "" and not matched_exp[i]:
+            matched_exp[i] = True
+            primary_matched += 1
 
     # Blank lines shouldn't count as hallucinations (models often insert them).
     hallucinated -= sum(
