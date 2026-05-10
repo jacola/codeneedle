@@ -83,6 +83,8 @@ def main() -> int:
                     help=f"context size for local models (default: {DEFAULT_CONTEXT})")
     ap.add_argument("--keep-loaded", action="store_true",
                     help="don't unload the last model when done")
+    ap.add_argument("--max-tokens", type=int, default=8000,
+                    help="max tokens per request (default: 8000)")
     args = ap.parse_args()
 
     from bench.config import load_model
@@ -163,7 +165,8 @@ def main() -> int:
         for corpus_stem in missing_corpora:
             print(f"\n===== {corpus_stem} × {model_stem} =====")
             result_path = RESULTS_DIR / f"{corpus_stem}__{model_stem}.json"
-            cmd = [python, "bench.py", "run", "--corpus", corpus_stem, "--model", model_stem]
+            cmd = [python, "bench.py", "run", "--corpus", corpus_stem, "--model", model_stem,
+                   "--max-tokens", str(args.max_tokens)]
             r = subprocess.run(cmd)
             if result_path.is_file():
                 new_count += 1
