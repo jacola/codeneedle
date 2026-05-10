@@ -48,7 +48,9 @@ def language_of(path: Path) -> str:
         return "js"
     if suffix == ".py":
         return "py"
-    raise ValueError(f"Unsupported file type: {suffix!r}. Supported: .js, .mjs, .cjs, .py")
+    if suffix == ".cs":
+        return "cs"
+    raise ValueError(f"Unsupported file type: {suffix!r}. Supported: .js, .mjs, .cjs, .py, .cs")
 
 
 def extract(path: Path) -> list[FunctionTarget]:
@@ -56,6 +58,8 @@ def extract(path: Path) -> list[FunctionTarget]:
     lang = language_of(path)
     if lang == "js":
         targets = _extract_js(source)
+    elif lang == "cs":
+        targets = _extract_cs(source)
     else:
         targets = _extract_py(source)
     for t in targets:
@@ -119,7 +123,7 @@ def load_source_glob(
 
 
 def _file_header(lang: str, path: Path) -> str:
-    marker = "//" if lang == "js" else "#"
+    marker = "//" if lang in ("js", "cs") else "#"
     return f"{marker} ====== {path} ======\n"
 
 
@@ -252,6 +256,96 @@ def _extract_py(source: str) -> list[FunctionTarget]:
         targets.append(
             FunctionTarget(name=node.name, start_line=start, body_lines=body)
         )
+    return targets
+
+
+# --- C# -----------------------------------------------------------------------
+
+import re
+
+# C# keywords / control-flow that look like method calls syntactically
+# (e.g. `foreach (var x in xs)`) but must not be extracted as methods.
+_CS_KEYWORDS = frozenset({
+    "foreach", "for", "while", "do", "if", "else", "switch", "case",
+    "lock", "using", "try", "catch", "finally", "throw", "return",
+    "yield", "await", "checked", "unchecked", "fixed", "typeof",
+    "sizeof", "nameof", "default", "delegate", "stackalloc", "when",
+})
+
+_CS_METHOD_RE = re.compile(
+    r'''
+    ^\s*                                     # leading whitespace
+    (?:(?:public|private|protected|internal|static|virtual|override|abstract|async|sealed|new|partial|unsafe|extern)\s+)*  # modifiers
+    [\w<>\[\],\s\?]+?\s+                       # return type (greedy-minimal)
+    (\w+)                                     # method name (captured)
+    \s*\([^)]*\)                              # parameter list
+    (?:\s*where\s+[^{]+)?                     # optional generic constraints
+    \s*$                                      # end of line (opening brace on next line or same line)
+    ''',
+    re.VERBOSE | re.MULTILINE,
+)
+
+
+def _extract_cs(source: str) -> list[FunctionTarget]:
+    """Extract C# methods by regex + brace matching.
+
+    C# conventions: method signature on one line, opening '{' on same or next line.
+    We find the opening brace, then match braces to locate the closing one.
+    """
+    lines = source.splitlines()
+    targets: list[FunctionTarget] = []
+    seen: set[str] = set()
+
+    for match in _CS_METHOD_RE.finditer(source):
+        name = match.group(1)
+        if name in _CS_KEYWORDS or name in seen:
+            continue
+
+        # Find which line number contains the match
+        match_line_idx = source[:match.start()].count("\n")
+
+        # Find the opening brace — could be on the same line or next few lines
+        brace_line_idx = None
+        for scan in range(match_line_idx, min(match_line_idx + 3, len(lines))):
+            if "{" in lines[scan]:
+                brace_line_idx = scan
+                break
+
+        if brace_line_idx is None:
+            continue
+
+        # Brace-match to find the end of the method body
+        depth = 0
+        close_line_idx = None
+        for i in range(brace_line_idx, len(lines)):
+            for ch in lines[i]:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        close_line_idx = i
+                        break
+            if close_line_idx is not None:
+                break
+
+        if close_line_idx is None:
+            continue
+
+        # Body lines are between the opening brace line and closing brace line
+        body = lines[brace_line_idx + 1:close_line_idx]
+        if len(body) < MIN_BODY_LINES:
+            continue
+
+        seen.add(name)
+        targets.append(
+            FunctionTarget(
+                name=name,
+                start_line=brace_line_idx + 2,  # 1-indexed, first line after '{'
+                body_lines=body,
+            )
+        )
+
     return targets
 
 

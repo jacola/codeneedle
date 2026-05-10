@@ -42,10 +42,13 @@ ANCHOR_PHRASE = {
           "brace `{{`)",
     "py": "starting with the first body line after the `def {name}(...):` "
           "signature (including the docstring if present)",
+    "cs": "starting immediately after the opening brace `{{` of the method "
+          "`{name}`",
 }
 SIGNATURE_MARKER = {
     "js": "function {name}(",
     "py": "def {name}(",
+    "cs": "{name}(",
 }
 # Qwen3 (and other reasoning-enabled models) treat `/no_think` as a directive
 # to skip chain-of-thought. Ignored by non-reasoning models. For a pure recall
@@ -122,7 +125,7 @@ def run_benchmark(
     suppress_thinking: bool = True,
     skip_preflight: bool = False,
     fail_fast_after: int | None = 2,
-    relax_indent: bool = False,
+    relax_indent: bool = True,
 ) -> list[FunctionScore]:
     text = source.text
     total_lines = text.count("\n") + 1
